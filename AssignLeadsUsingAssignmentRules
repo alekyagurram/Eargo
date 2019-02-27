@@ -1,0 +1,46 @@
+public class AssignLeadsUsingAssignmentRules 
+{
+    @InvocableMethod
+    public static void LeadAssign(List<Id> LeadIds)
+    {
+            Database.DMLOptions dmo = new Database.DMLOptions();
+            dmo.assignmentRuleHeader.useDefaultRule= true;          
+            List<Lead> Leads=[select id from lead where lead.id in :LeadIds];
+            for(Lead ld:Leads)
+             {
+                ld.setOptions(dmo);
+              }
+            update Leads;
+   }
+
+}
+
+//Test Class
+
+@isTest
+public class AssignLeadsUsingAssignmentRulesTest {
+    private static testMethod void doTest() {
+        
+        Test.startTest();
+        
+        Lead l = new Lead(LastName = 'Test Lead', Company = 'Test Company');
+        
+        insert l;
+        
+        
+        
+        List<Id> leadIds = new List<Id> {l.Id};
+            
+            AssignLeadsUsingAssignmentRules.leadAssign(leadIds );
+        
+        Test.stopTest();
+        
+        
+        
+        l = [Select OwnerID From Lead where ID = :l.id];
+        
+        // uncomment line below with correct expected value
+        
+        // system.assertEquals(WHATYOUEXPECT, l.OwnerID);
+            }
+}
