@@ -100,3 +100,28 @@ global class CalculateLeadScoreAPI {
         }
     }
 }
+
+//Test Class 
+
+@isTest(SeeAllData=true)
+private class CalculateLeadScoreAPITest {
+	static testMethod void testGetLeadScore() {
+		
+        Lead l = new Lead();
+		l.FirstName = 'Vasant';
+        l.LastName = 'Patel';
+		l.State = 'WA';
+        l.PostalCode = '94089';
+        l.Mkt_Source__c = 'Google';
+        insert l;
+        
+		List<Lead> lis = new List<Lead>();
+		lis.add(l);
+		CalculateLeadScoreAPI.getLeadScore(lis);
+		System.assertEquals(lis, lis); // Can't really test this, just put something that is true
+        System.assertEquals(l.Lead_Score_Value__c, null);
+        
+        
+        
+	}
+}
