@@ -1,0 +1,236 @@
+public class OrderProductUnitPrice1 
+{
+       
+    // Dev
+    private static final String dev_url = 'https://etr6590c00.execute-api.us-west-1.amazonaws.com/Dev/taxcalculator';
+    //Prod
+    private static final String prod_url='https://qh473xq5rc.execute-api.us-west-1.amazonaws.com/prod/taxcalculator';
+    public static  String method='POST';    
+
+    public static String get_url(){
+        
+        Boolean IsSandbox = [SELECT IsSandbox FROM Organization LIMIT 1].IsSandbox;   
+        return IsSandbox?dev_url:prod_url;
+    }
+
+    // prepares body object
+     public static String prepareBodyFromOrderObj(Order newOrder, List<OrderItem> oitem){
+        Order o = newOrder;
+        
+        //List<OrderItem> oit = [SELECT UnitPrice, Quantity FROM OrderItem WHERE OrderId =: o.ID];
+        Map<String,Object> body_dic = new Map<String,Object>();
+        List<Map<String, Object>> line_items = new List<Map<String, Object>>();
+        
+         
+        for(OrderItem oit: oitem) {
+            Product2 p = [SELECT Product2.Eargo_Tax_Code__c, Product2.ProductCode FROM OrderItem WHERE Id=: oit.Id LIMIT 1].Product2;
+        	Map<String,Object> dic_items = new Map<String,Object>();
+        	dic_items.put('quantity', oit.Quantity.intValue());
+        	dic_items.put('list_price', oit.ListPrice);
+        	dic_items.put('order_item_id', oit.Id);
+            dic_items.put('product_code', p.ProductCode);   
+            dic_items.put('tax_code', p.Eargo_Tax_Code__c);
+        	line_items.add(dic_items);
+        }
+        // ((o.Agent_Promo_Total__c == NULL)? 0:o.Agent_Promo_Total__c));
+        body_dic.put('order_id', o.Id);
+        body_dic.put('coupon_amount', ((o.Agent_Promo_Total__c == NULL)? 0:o.Agent_Promo_Total__c));
+                     
+        if(String.isNotBlank((o.ShippingStreet))){
+             body_dic.put('to_street', o.ShippingStreet);            
+          }
+        if(String.isNotBlank((o.ShippingCity))){
+        	body_dic.put('to_city', o.ShippingCity);
+        }          
+        // (o.ShippingState).touppercase()
+        body_dic.put('to_country', 'US');      
+        body_dic.put('to_state', (String.isBlank(o.ShippingState)? '':(o.ShippingState).touppercase()));          
+        body_dic.put('to_zip', o.ShippingPostalCode);
+                     
+        if(o.Order_SubTotal__c != NULL){
+        	body_dic.put('amount', o.Order_SubTotal__c);     
+        }
+        
+        body_dic.put('line_items',line_items);
+        String body = JSON.serialize(body_dic);    
+        
+        return body;
+     }
+    
+    public static void calculateTax(Order newOrder, List<OrderItem> oitem){
+        Order o = newOrder;
+        Id order_item_id;
+        for(OrderItem oit: oitem) {
+            order_item_id = oit.Id;
+        }
+        String body = OrderProductUnitPrice1.prepareBodyFromOrderObj(newOrder, oitem);
+        System.enqueueJob(new QueueableAPICall(body, order_item_id));
+        Order o1 = [SELECT Id, Calculate_Sales_Tax__c FROM Order where Id =: o.Id Limit 1];
+        o1.Calculate_Sales_Tax__c = False;
+        update o1;
+    }
+    
+    //After Insert && After Update from trigger on OrderItems
+    public static void updateOrderProductUnitPrice(OrderItem oi )
+    {
+        List<Order> o = [select Id, 
+                         Agent_Promo_Total__c, 
+                         OrderReferenceNumber,
+                         CreatedDate,
+                         ShippingStreet,
+                         ShippingCity,
+                         ShippingState,
+                         ShippingCountry,
+                         ShippingPostalCode,
+                         Order_SubTotal__c 
+                        FROM Order
+                        WHERE id =: oi.OrderId
+                        Limit 1];
+        
+        String orderReferenceNumber = (o[0].OrderReferenceNumber == NULL )?'UNKNOWN':o[0].OrderReferenceNumber;
+        if( orderReferenceNumber.Startswith('SA') || orderReferenceNumber.Startswith('RE')) {
+            List<OrderItem> oit = [select Id, ListPrice , Quantity from OrderItem where OrderId =: oi.OrderId];
+           
+            if(oit.size() > 0) 
+                OrderProductUnitPrice1.calculateTax(o[0], oit);
+    
+        }
+        
+     }
+
+    public static void updateOrderProductUnitPrice(OrderItem oi , OrderItem oldoi )
+    { 
+         List<Order> o = [select Id, 
+                          Agent_Promo_Total__c , 
+                          OrderReferenceNumber,
+                          CreatedDate,
+                          ShippingStreet,
+                          ShippingCity,
+                          ShippingState,
+                          ShippingCountry,
+                          ShippingPostalCode,
+                          Order_SubTotal__c 
+                          FROM Order where id =: oi.OrderId];
+         String orderReferenceNumber = (o[0].OrderReferenceNumber == NULL )?'UNKNOWN':o[0].OrderReferenceNumber;
+         if( orderReferenceNumber.Startswith('SA') || orderReferenceNumber.Startswith('RE')) {
+                if(oi.Quantity != oldoi.Quantity ) {
+               	
+                    List<OrderItem> oit = [select Id, ListPrice , Quantity from OrderItem where OrderId =: oi.OrderId];
+                    if(oit.size() > 0) 
+                    	OrderProductUnitPrice1.calculateTax(o[0], oit);
+                }
+            }
+         
+    }
+	
+    // After Insert && After Update from trigger on Order. 
+    public static void updateOrderProductUnitPrice(Order newOrder, Order oldOrder)
+    {   
+        Boolean recalculate = False;
+        String orderReferenceNumber = (newOrder.OrderReferenceNumber == NULL )?'UNKNOWN':newOrder.OrderReferenceNumber;
+        if(orderReferenceNumber.Startswith('SA') || orderReferenceNumber.Startswith('RE')) 
+        {     
+			
+            if ( (oldOrder.Agent_Promo_Total__c == NULL ? 0.00 : oldOrder.Agent_Promo_Total__c)
+                != (newOrder.Agent_Promo_Total__c == NULL ? 0.00 : newOrder.Agent_Promo_Total__c)
+               ) {
+               recalculate = True;
+               }
+            else if(newOrder.Calculate_Sales_Tax__c){
+                recalculate = True;
+            } 
+            else if( ( (String.isBlank(newOrder.ShippingStreet)?'':newOrder.ShippingStreet)
+                    	!= (String.isBlank(oldOrder.ShippingStreet)?'':oldOrder.ShippingStreet))
+                      ||
+                     ( (String.isBlank(newOrder.ShippingState)?'':newOrder.ShippingState)
+                    	!= (String.isBlank(oldOrder.ShippingState)?'':oldOrder.ShippingState))
+                      ||
+                     ( (String.isBlank(newOrder.ShippingCity)?'':newOrder.ShippingCity)
+                    	!= (String.isBlank(oldOrder.ShippingCity)?'':oldOrder.ShippingCity))
+                      ||
+                     ( (String.isBlank(newOrder.ShippingCountry)?'':newOrder.ShippingCountry)
+                    	!= (String.isBlank(oldOrder.ShippingCountry)?'':oldOrder.ShippingCountry))
+                   ) {
+                       recalculate = True;
+                   }
+        }
+
+        if(recalculate) 
+        {
+            List<OrderItem> oitem = [SELECT Id, ListPrice ,Quantity FROM OrderItem WHERE OrderId =: newOrder.Id];
+            
+			if(oitem.size() > 0) 
+            	OrderProductUnitPrice1.calculateTax(newOrder, oitem);
+            
+        }
+    }
+   
+    public static void updateTaxes(HttpResponse res){
+        
+             Map<String, Object> responseBody = (Map<String, Object>)JSON.deserializeUntyped(res.getBody());
+             List<Object> responseList = (List<Object>)responseBody.get('line_items');
+            
+             for (Object item : responseList){
+                Map<String,Object> line_item = (Map<String,Object>)item;
+                if (line_item.get('order_item_id') != null){     
+                	OrderItem oit = new OrderItem();
+                    oit.ID = (Id)line_item.get('order_item_id');
+                    oit.Tax_Amount__c = Double.valueOf(line_item.get('total_tax_amount'));
+                    oit.State_Tax_Rate__c = Double.valueOf(line_item.get('state_rate'));
+                    oit.County_Tax_Rate__c = Double.valueOf(line_item.get('county_rate'));
+                    oit.City_Tax_Rate__c = Double.valueOf(line_item.get('city_rate'));
+                    oit.Combined_District_Tax_Rate__c = Double.valueOf(line_item.get('combined_district_rate'));
+                    oit.Tax_State_Name__c = String.valueOf(responseBody.get('to_state'));
+                    oit.Tax_County_Name__c = String.valueOf(responseBody.get('to_county'));
+                    oit.Tax_City_Name__c = String.valueOf(responseBody.get('to_city'));
+                    oit.Tax_Rate__c = Double.valueOf(line_item.get('combined_tax_rate'));
+                    oit.Eargo_Tax_Code__c = String.valueOf(line_item.get('tax_code'));
+                    oit.Discount__c = Double.valueOf(line_item.get('unit_discount_amount'));
+                    oit.UnitPrice = Double.valueOf(line_item.get('unit_price_after_discount'));
+                    if (!Test.isRunningTest()) {
+                    	update oit;
+                    }
+				
+                }
+            }
+         }
+
+     public class QueueableAPICall implements System.Queueable, Database.AllowsCallouts {
+        
+        private final String body;
+        private final Id order_item_id;
+        public QueueableAPICall(String body, Id order_item_id) {
+            this.body = body;
+            this.order_item_id = order_item_id;
+        }
+        public void execute(System.QueueableContext ctx) {
+            HttpRequest req = new HttpRequest();
+            req.setEndpoint(OrderProductUnitPrice1.get_url());
+            req.setMethod(method);
+            req.setBody(body);
+            Http http = new Http();
+            HttpResponse res;
+            
+            if (!Test.isRunningTest()) { // HTTP callout is not allowed in tests apparently...
+              res = http.send(req);
+              OrderProductUnitPrice1.updateTaxes(res);  
+            }
+            else{
+              res = new HttpResponse();
+              res.setHeader('Content-Type', 'application/json');
+              res.setBody('{ "coupon_amount": 100,"to_country": "US","to_zip": "46962","to_state": "IN",'+
+                           + '"line_items": ['+
+                           + '      {"order_item_id": "'+ order_item_id +'",'+
+                           + '  "unit_price_after_discount": 2215.1162790697676,"unit_discount_amount": 34.883720930232556,'+
+                           + '  "combined_tax_rate": 0.07,"state_rate": 0.07,"county_rate": 0,"city_rate": 0,"combined_district_rate": 0,'+
+                           + ' "total_tax_amount": 310.1162790697675,"unit_tax_amount": 155.05813953488374,"total_amount": 4740.3488372093025}]}'
+                         );
+              res.setStatusCode(200);
+              res.setStatus('OK');
+              OrderProductUnitPrice1.updateTaxes(res);
+            }
+        }   
+	}
+ 
+}
+
