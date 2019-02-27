@@ -1,0 +1,89 @@
+/**Order Shipping Address copies to AccountShipping Address **/
+
+Public class CopiesShippingAddress
+ {
+   //Copies S Order Number in Original Sales Order Field//
+  /* Public Static void copiesSalesOrderNumber(List<Order> newOrdr)
+    {
+    Set<Id> accountIds = new Set<Id>();
+     Map<Id,Order> ordrMap = new Map<Id,Order>();
+     for(Order o:newOrdr)
+      {
+        if(o.Type == 'Return')
+         {
+           accountIds.add(o.AccountId);
+           ordrMap.put(o.AccountId,o);
+         }
+      }
+      if(accountIds.size() > 0){
+      for(Id Ids:accountIds){
+      Order o = new Order();
+        o = [Select Id,OrderReferenceNumber from Order where AccountId =: Ids and OrderReferenceNumber Like 'S%' Order BY CreatedDate DESC Limit 1];
+        if(o != null)
+        ordrMap.get(Ids).Original_Sales_Order__c = o.OrderReferenceNumber;
+      }
+    }
+    }*/
+   
+     
+     public static void insertAccountShippingAddress(Order newOrder) {
+        Account acc = [Select ShippingStreet,ShippingCity,ShippingState,ShippingPostalCode,ShippingCountry from Account where Id =: newOrder.AccountId];            
+        acc.ShippingStreet = newOrder.ShippingStreet;
+        acc.ShippingCity = newOrder.ShippingCity;
+        acc.ShippingState = newOrder.ShippingState;
+        acc.ShippingCountry = newOrder.ShippingCountry;
+        acc.ShippingPostalCode = newOrder.ShippingPostalcode;
+        update acc;
+    }
+     
+     public static void updateAccountShippingAddress(Order newOrder,Order oldOrder){
+          if(
+              newOrder.ShippingStreet != oldOrder.ShippingStreet || 
+              newOrder.ShippingCity !=  oldOrder.ShippingCity ||
+              newOrder.ShippingState != oldOrder.ShippingState || 
+              newOrder.ShippingPostalCode !=  oldOrder.ShippingPostalCode || 
+              newOrder.ShippingCountry !=  oldOrder.ShippingCountry
+       ) {
+           Account acc = [Select ShippingStreet,ShippingCity,ShippingState,ShippingPostalCode,ShippingCountry from Account where Id =: newOrder.AccountId];            
+           acc.ShippingStreet = newOrder.ShippingStreet;
+           acc.ShippingCity = newOrder.ShippingCity;
+           acc.ShippingState = newOrder.ShippingState;
+           acc.ShippingCountry = newOrder.ShippingCountry;
+           acc.ShippingPostalCode = newOrder.ShippingPostalcode;
+           update acc;
+      }
+     }
+     
+ }
+ 
+ //Test Class
+ 
+ @isTest 
+public class TestCopiesShippingAddress 
+  {
+    static testMethod void myTest() 
+      {
+       Account acc = new Account();
+       acc.LastName='Test Account';
+       Test.startTest();
+       insert acc;
+       
+       Order ordr = new Order();
+       ordr.AccountId = acc.Id;
+       ordr.Name = 'Test Order';
+       ordr.Type ='Sales';
+       ordr.Status ='Draft';
+       ordr.EffectiveDate =System.today();
+       
+       insert ordr;
+       
+       ordr.ShippingStreet = 'Test Street';
+       ordr.ShippingCity = 'Test City';
+       ordr.ShippingState = 'Test State';
+       ordr.ShippingCountry = 'Test Country';
+       ordr.ShippingPostalCode='500009';
+       update ordr;
+       
+       Test.stopTest();
+      }
+  }
