@@ -1,0 +1,102 @@
+global class CalculateLeadScoreAPI {
+    
+    // Dev
+    private static final String dev_url='https://etr6590c00.execute-api.us-west-1.amazonaws.com/Dev/eargoleadscore';
+    //Prod
+    private static final String prod_url='https://qh473xq5rc.execute-api.us-west-1.amazonaws.com/prod/eargoleadscore';
+    private static final String method='POST';    
+    
+    public static String get_url(){
+        
+        Boolean IsSandbox = [SELECT IsSandbox FROM Organization LIMIT 1].IsSandbox;   
+        return IsSandbox?dev_url:prod_url;
+    }
+    
+    @InvocableMethod(label='Calculate Lead Score - AWS')
+    public static void getLeadScore(List<Lead> leads) {
+        
+        for (Lead l : leads) {
+            // String body = '{"Id":"'+l.Id +'","State":"'+l.State +'","PostalCode":"'+l.PostalCode +'","Mkt_Source__c":"'+l.Mkt_Source__c +'","Mkt_Campaign__c":"'+l.Mkt_Campaig__c +'"}'; 
+            System.JSONGenerator json = JSON.createGenerator(true);
+            json.writeStartObject();
+            json.writeStringField('Id',l.Id);
+            json.writeStringField('State',String.isBlank(l.State)?'':l.State);
+            json.writeStringField('PostalCode',String.isBlank(l.PostalCode)?'':l.PostalCode);
+            json.writeStringField('Mkt_Source__c',String.isBlank(l.Mkt_Source__c)?'':l.Mkt_Source__c);
+            json.writeStringField('Mkt_Campaign__c',String.isBlank(l.Mkt_Campaig__c)?'':l.Mkt_Campaig__c);
+            json.writeStringField('Online_Tracking__c',String.isBlank(l.Online_Tracking__c)?'':l.Online_Tracking__c);
+            json.writeStringField('FirstName',String.isBlank(l.FirstName)?'':l.FirstName);
+			json.writeStringField('LeadSource',String.isBlank(l.LeadSource)?'':l.LeadSource);
+            json.writeEndObject();
+            
+            String body = json.getAsString();            
+            System.enqueueJob(new QueueableAPICall(body, l.Id));
+        }
+    }
+
+    public class QueueableAPICall implements System.Queueable, Database.AllowsCallouts {
+
+       
+        private final String body;
+        private final id leadId;
+
+        public QueueableAPICall(String body, id leadId) {
+            this.body = body;
+            this.leadId = leadId;
+        }
+        
+        public void updateLead(HttpResponse res){
+            JSONParser parser = JSON.createParser(res.getBody());
+            String leadScore;
+            Double leadScoreValue;
+            String leadScoreGender;
+            Double leadScoreVersion;
+            
+            while (parser.nextToken() != null) {    
+                if (parser.getCurrentToken() == JSONToken.FIELD_NAME) {
+                   parser.nextValue();
+                   if(parser.getCurrentName() == 'Lead_Score__c') {
+                       leadScore = parser.getText();
+                   } else if (parser.getCurrentName() == 'Lead_Score_Value__c') {
+                       leadScoreValue =  Double.valueOf(parser.getText());   
+                   } else if (parser.getCurrentName() == 'Lead_Score_Gender__c') {
+                       leadScoreGender =  parser.getText();   
+                   } else if (parser.getCurrentName() == 'Lead_Score_Version__c') {
+                       leadScoreVersion =  Double.valueOf(parser.getText());   
+                   }
+                } 
+            }
+            
+            if (leadScore != null){
+               Lead ul = new Lead();
+               ul.ID = leadId;
+               ul.Lead_Score__c = leadScore;
+               ul.Lead_Score_Value__c = leadScoreValue;
+               ul.Lead_Score_Gender__c = leadScoreGender;
+               ul.Lead_Score_Version__c = leadScoreVersion;
+                   
+               update ul;
+            }
+        }
+
+        public void execute(System.QueueableContext ctx) {
+            HttpRequest req = new HttpRequest();
+            req.setEndpoint(CalculateLeadScoreAPI.get_url());
+            req.setMethod(method);
+            req.setBody(body);
+            Http http = new Http();
+            HttpResponse res;
+            if (!Test.isRunningTest()) { // HTTP callout is not allowed in tests apparently...
+                res = http.send(req);
+                this.updateLead(res);
+            } else {
+                res = new HttpResponse();
+                res.setHeader('Content-Type', 'application/json');
+                res.setBody('{"Lead_Score__c":"High","Lead_Score_Value__c": 9}');
+                res.setStatusCode(200);
+                res.setStatus('OK');
+                this.updateLead(res);
+            }
+        }
+    }
+}
