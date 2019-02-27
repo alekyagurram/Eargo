@@ -1,0 +1,94 @@
+public class RoundRobinRepsUpdate {
+	
+    // method to calculate GCD
+    public Static Long getGCD(Long value1, Long value2){
+        // if value2 is 0 then return value 1
+        if(value2 == 0){
+            return value1;
+        }
+        // if value2 is not 0 then call GCD with putting value2 to value 1 and value 2 as mod of value 1 and 2
+        return getGCD(value2, Math.mod(value1,value2));
+    }    
+    
+    public Static void updateRoundRobinReps(RoundRobin__c rr){
+        
+        // initialize gcd to 0
+        Long gcd = 0;
+        
+        // get list of all reps assigned to given round robin queue
+        List<Round_Robin_Reps__c> rrreps = [SELECT Id, of_Average__c, Max__c, Min__c,Rep__c,Round_Robin_Id__c, Active__c 
+                                            FROM Round_Robin_Reps__c 
+                                            WHERE RoundRobin__c =: rr.Id
+                                         ORDER BY Name ASC];
+        
+        // initialize list of Round_Robin_Reps__c 
+        List<Round_Robin_Reps__c> listRRReps = new List<Round_Robin_Reps__c>();
+        
+        // initialize variables rep_id, max and min util for rep default to 0
+        Integer rep_id = 0;
+        Double min_uti = 0.00;
+        Double max_uti = 0.00;
+        Double rep_utilization = 0.00;
+        
+        for (Round_Robin_Reps__c rep : rrreps) {
+            
+            Decimal rep_weight = (rep.of_Average__c == Null)? 0 : rep.of_Average__c;
+            
+            if( rep_weight > 0 && rep.Active__c == True) {
+            
+                // update rep id to previous id by adding 1
+                rep_id = rep_id + 1;
+                rep.Round_Robin_Id__c = rep_id;
+                
+                // utilization is percentage 
+                rep_utilization = rep.of_Average__c/100;
+                
+                // set max range limit limit for rep
+                max_uti = min_uti + rep_utilization;
+                rep.Max__c = max_uti;
+                
+                //set min range limit
+                min_uti = max_uti - rep_utilization;
+                rep.Min__c= min_uti;
+                min_uti = max_uti;
+                
+                // add rep to the list
+                listRRReps.add(rep);
+                
+                // recalculate gcd
+                gcd = (gcd == 0)?(Long)rep.of_Average__c:getGCD(gcd,(Long)rep.of_Average__c);
+            } 
+            else {
+               rep.Round_Robin_Id__c = -1;
+               rep.Min__c = -1.000;
+               rep.max__c = -1.000;
+               listRRReps.add(rep);
+            }
+        }
+        update listRRReps;
+        rr.GCD__c = gcd;
+        update(rr);
+    }
+    
+    @InvocableMethod(label='updateRoundRobinReps')
+    public Static void updateRoundRobins(){
+        // for give round robin queue recalculate min max range and gcd
+        List<RoundRobin__c> rrs = [SELECT Id, Active_Reps__c,Active_Total__c, GCD__c  FROM RoundRobin__c WHERE Active__c = True];
+		
+        for(RoundRobin__c rr : rrs){
+        	updateRoundRobinReps(rr);
+        }
+        
+    }
+}
+
+//Test Class
+
+@isTest(SeeAllData=true)
+public class RountRobinReps_Test {
+	static testMethod void test_RoundRobinReps() {
+        Test.startTest();
+        RoundRobinRepsUpdate.updateRoundRobins();
+        Test.stopTest();
+  }
+}
