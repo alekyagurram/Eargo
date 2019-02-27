@@ -1,0 +1,130 @@
+// Order Trigger
+Trigger OrderObjectTrigger on Order(after delete, after insert, after undelete, after update, before update)
+{
+    if(Trigger.isBefore) {
+        if(Trigger.isUpdate) {
+            OrderMasterApex.beforeUpdateOrder(trigger.new, Trigger.oldMap);
+        }
+    }
+    if(Trigger.isAfter){
+        if (Trigger.isInsert) {
+            OrderMasterApex.afterinsertOrder(trigger.new);  // Copies Order Address to Account Shipping Address.
+        }
+        else if (Trigger.isUpdate) {
+            OrderMasterApex.afterupdateOrder(trigger.new, Trigger.oldMap); // Master Apex Class that calls all the after update actions . 
+            
+            
+        }
+    }
+}
+
+// Order Item Trigger
+trigger OrderItemObjectTrigger on OrderItem (after insert , after update ,after delete )  {
+    
+    if(trigger.isAfter && trigger.isInsert) {
+        OrderItemMasterApex.afterinsertOrderItem(trigger.new);
+    }
+    
+    if(trigger.isAfter && trigger.isUpdate) {
+        OrderItemMasterApex.afterupdateOrderItem(trigger.new,Trigger.oldMap);
+    }
+    
+    if(trigger.IsAfter && trigger.IsDelete) {
+        OrderItemMasterApex.afterdeleteOrderItem(trigger.old)  ;
+    }
+
+}
+
+//Account Trigger
+
+trigger AccountObjectTrigger on Account (after insert,after update) {
+    if(Trigger.isAfter){
+        if (Trigger.isInsert) {
+        	AccountMasterApex.afterInsertAccount(trigger.new);  
+        }
+    	else if (Trigger.isUpdate) {
+        	AccountMasterApex.afterUpdateAccount(trigger.new, Trigger.oldMap); // Master Apex Class that calls all the after update actions . 
+        }
+    }
+}
+
+//Lead Trigger 
+Trigger LeadObjectTrigger on Lead (after update)
+{
+    if(Trigger.isAfter){
+        
+        if (Trigger.isUpdate) {
+            LeadMasterApex.afterupdateLead(trigger.new, Trigger.oldMap); // Master Apex Class that calls all the after update actions . 
+        }
+    }
+}
+
+//Lead Score trigger 
+trigger CalculateLeadScoreTrigger on Lead (after Insert, after update) {
+    Lead[] leads = Trigger.new;
+    List<Lead> trLeads = new List<Lead>();
+    
+    for(Lead l : leads) {
+        Lead ol;
+        
+        Double i = 0;
+        if(Trigger.isAfter){
+        	if (Trigger.isInsert) {
+        		i = 1;
+            }
+        	else if (Trigger.isUpdate) {
+            	ol = Trigger.oldMap.get(l.Id);
+     
+                if (l.Lead_Score__c == null){
+                    i = 1;
+                }
+                // check for change to see if lead score requires to be updated
+                else if(ol.PostalCode  == null && l.PostalCode  != null){
+                   i = 1;
+                }
+                else if(ol.PostalCode != null &&  l.PostalCode == null) {
+                    i = 1;
+                }
+                else if(ol.PostalCode  != null && l.PostalCode  != null && ! ol.PostalCode.equals(l.PostalCode)) {
+                    i = 1;
+                }
+          
+                else if(ol.FirstName  == null && l.FirstName  != null){
+                    i = 1;
+                }
+                else if(ol.FirstName != null &&  l.FirstName == null) {
+                    i = 1;
+                }
+                else if(ol.FirstName != null && l.FirstName != null && ! ol.FirstName.equals(l.FirstName)) {
+                    i = 1;
+                }
+            
+                else if(ol.Online_Tracking__c  == null && l.Online_Tracking__c  != null){
+                    i = 1;
+                }
+                else if(ol.Online_Tracking__c != null &&  l.Online_Tracking__c == null) {
+                    i = 1;
+                }
+                else if(ol.Online_Tracking__c != null && l.Online_Tracking__c != null && ! ol.Online_Tracking__c.equals(l.Online_Tracking__c)) {
+                    i = 1;
+                }
+            
+                else if(ol.LeadSource  == null && l.LeadSource  != null){
+                    i = 1;
+                }
+                else if(ol.LeadSource != null &&  l.LeadSource == null) {
+                    i = 1;
+                }
+                else if(ol.LeadSource != null && l.LeadSource != null && ! ol.LeadSource.equals(l.LeadSource)) {
+                    i = 1;
+                }
+       
+            }
+            if (i == 1) {
+                    trLeads.add(l);
+            }
+        }
+     }
+        
+    CalculateLeadScoreAPI.getLeadScore(trLeads); 
+}
