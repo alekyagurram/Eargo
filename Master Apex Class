@@ -426,3 +426,34 @@ public class OrderMasterApex_Test
 }
 
 
+// Order Item Master Class 
+
+public class OrderItemMasterApex {
+    
+    public static void afterinsertOrderItem(List<OrderItem> orderitems ) {
+        for(OrderItem oi : orderitems) {
+           // OrderProductUnitPrice.updateOrderProductUnitPrice(oi);
+           OrderProductUnitPrice1.updateOrderProductUnitPrice(oi);
+           // AutomatedTaxCalculation.recalculateOrderTax(oi);
+         }
+    }
+     
+    public static void afterupdateOrderItem(List<OrderItem> orderitems , Map<Id,OrderItem> oldorderitems ) {
+        for(OrderItem oi : orderitems) {
+            OrderItem oldoi = oldorderitems.get(oi.id);
+            // OrderProductUnitPrice.updateOrderProductUnitPrice(oi, oldoi);
+            OrderProductUnitPrice1.updateOrderProductUnitPrice(oi, oldoi);
+            // AutomatedTaxCalculation.recalculateOrderTax(oi, oldoi);
+        }
+    }
+    
+    public static void afterdeleteOrderItem(List<OrderItem> oldorderitems) {
+        for(OrderItem oi : oldorderitems) {
+           // OrderProductUnitPrice.updateOrderProductUnitPrice(oi);
+           OrderProductUnitPrice1.updateOrderProductUnitPrice(oi);
+           // AutomatedTaxCalculation.recalculateOrderTax(oi);
+         }
+    }  
+    
+}
+
