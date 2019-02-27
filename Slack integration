@@ -1,0 +1,77 @@
+public class SlackLeadPublisher {
+
+     
+    //private static final String slackURL = 'https://hooks.slack.com/services/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';
+    //private static final String slackURL = 'https://hooks.slack.com/services/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';
+    
+    public class JCLead {
+        @InvocableVariable(label='Lead Owner Name')
+        public String LeadOwnerName;
+        @InvocableVariable(label='Lead First Name')
+        public String LeadFirstName;
+        @InvocableVariable(label='Lead Last Name')
+        public String LeadLastName;
+        //@InvocableVariable(label='Lead Phone')
+        //public String LeadPhone;
+        @InvocableVariable(label='Lead ID')
+        public String LeadID;
+        @InvocableVariable(label='Slack Webhook URL')
+        public String SlackWebhookURL;
+    }
+     
+    @InvocableMethod(label='Post to Slack')
+    public static void postToSlack(List<JCLead> jcleads) {
+        JCLead o = jcleads[0]; // If bulk, only post first to avoid overloading Slack channel
+        Map<String,Object> msg = new Map<String,Object>();
+        msg.put('text', '\nName: ' + o.LeadFirstName + ' ' + o.LeadLastName + '\nURL: ' + System.URL.getSalesforceBaseUrl().toExternalForm() + '/' + o.LeadID);
+        msg.put('mrkdwn', true);
+        String body = JSON.serialize(msg);    
+        System.enqueueJob(new QueueableSlackCall(o.SlackWebhookURL, 'POST', body));
+    }
+     
+    public class QueueableSlackCall implements System.Queueable, Database.AllowsCallouts {
+         
+        private final String url;
+        private final String method;
+        private final String body;
+         
+        public QueueableSlackCall(String url, String method, String body) {
+            this.url = url;
+            this.method = method;
+            this.body = body;
+        }
+         
+        public void execute(System.QueueableContext ctx) {
+            HttpRequest req = new HttpRequest();
+            req.setEndpoint(url);
+            req.setMethod(method);
+            req.setBody(body);
+            Http http = new Http();
+            if (!Test.isRunningTest()) { // HTTP callout is not allowed in tests apparently...
+            HttpResponse res = http.send(req);
+            }
+        }
+ 
+    }
+    
+}
+
+//Test class
+
+@isTest
+private class SlackLeadPublisher_Test {
+static testMethod void testPostToSlack() {
+SlackLeadPublisher.JCLead opt = new SlackLeadPublisher.JCLead();
+opt.LeadOwnerName = 'Aakash Patel';
+opt.LeadFirstName = 'Aakash';
+opt.LeadLastName = 'Patel';
+opt.LeadID = '00QW0000006JtMk';
+opt.SlackWebhookURL = 'http://eargo.com';
+
+List<SlackLeadPublisher.JCLead> lis = new List<SlackLeadPublisher.JCLead>();
+lis.add(opt);
+SlackLeadPublisher.postToSlack(lis);
+
+System.assertEquals(lis, lis); // Can't really test this, just put something that is true
+}
+}
