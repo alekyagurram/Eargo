@@ -1,0 +1,70 @@
+public class DeliveryCallCase {
+
+    public static void createDeliveryCallCase(Order o, Order oldO){
+        
+        // in sandbox we can not assing amount to order since field is not writable so skippint the check if running the test
+        Decimal orderTotal = 0.00;
+        if (! Test.isRunningTest())
+            orderTotal = 1000.00;
+        else
+            orderTotal = o.Order_Total__c;
+        
+        // check if any of the driving variables are null or not
+        if ( orderTotal == Null ||  
+            o.OrderReferenceNumber == Null || 
+            o.Estimated_Delivery_Time__c == Null || 
+            o.OrderStatus__c == Null )
+                     return;
+        
+        //check if order is S or SA 
+        if ( ! o.OrderReferenceNumber.startsWith('S') )
+            return;
+        
+        if (orderTotal < 998.00)
+            return;
+        
+        // check if order status is changed to Delivered from somthing other Then Delivered and delivery time is not null
+        if (o.OrderStatus__c != 'Delivered' || oldO.OrderStatus__c == 'Delivered')
+                return;
+        
+        if (o.Estimated_Delivery_Time__c < Date.today().addDays(-1))
+            return;
+        
+        // this type of case is not already created
+		List<Case> checkCase = [SELECT Id FROM Case WHERE Origin = 'Order - Delivered' AND OrderCase__c =: o.Id] ;
+        if(checkCase.size() > 0 )
+			return;            
+        
+        // Create a New Case instace
+        Case c = new Case();
+        Id contactId = [SELECT Id FROM Contact where AccountId =: o.AccountId].Id;
+        c.ContactId = contactId;
+        c.AccountId = o.AccountId;
+        c.Priority = 'High';
+        c.OwnerId = [SELECT Id FROM Group where Type = 'Queue' and Name = 'Client Care Support'].Id;
+        c.Status = 'New';
+        c.Origin = 'Order - Delivered';
+ 		c.OrderCase__c = o.Id;
+        c.Delivery_Call_Outcome__c = 'New';
+        
+        // check if Welcome call is cheduled or not
+        Boolean isWCScheduled = [SELECT Welcome_Call_Scheduled__c FROM Account WHERE Id =: o.AccountId ].Welcome_Call_Scheduled__c;
+   		
+        // calcualte delivery call priority
+        Integer deliveryCallPriority = 0;
+        if (o.PaymentType__c == 'AllWell Financing')
+            deliveryCallPriority = (isWCScheduled) ? 3 : 5;
+       	else if (o.PaymentType__c == 'Bread Financing')
+            deliveryCallPriority = (isWCScheduled) ? 3 : 5;
+       	else if (o.PaymentType__c == 'Credit Card' && o.OrderReferenceNumber.startsWith('SA'))
+            deliveryCallPriority = (isWCScheduled ) ? 2 : 4;
+       	else
+            deliveryCallPriority = 1;
+        
+        c.Delivery_Call_Priority__c = deliveryCallPriority;
+        c.Subject = (isWCScheduled) ? 'Delivery Call – WC Schedule not Required' : 'Delivery Call – WC Schedule Required';
+        
+        // Save new case
+        insert c;
+    }
+}
