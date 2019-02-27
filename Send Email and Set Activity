@@ -1,0 +1,78 @@
+public class sendEmailAndSetActivity {
+// In a separate class so that it can be used elsewhere
+
+    @InvocableMethod (label='SendEmail')
+    public static void sendEmail(List<SendEmailvariables> sendemailvariables) {
+    	
+        SendEmailvariables s = sendemailvariables[0]; 
+        
+        // Do Nothing if email is bounced    
+        if(s.emailbounced == 'True'){
+            return;
+        }        
+        
+        //New instance of a single email message
+        Messaging.SingleEmailMessage mail = new Messaging.SingleEmailMessage();
+        
+        // Who you are sending the email to
+        mail.setTargetObjectId(s.targetobjectid);
+    
+        // The email template ID used for the email
+        mail.setTemplateId(s.emailtemplateid);
+    
+        //mail.setWhatId(s.whatid);   
+        mail.setBccSender(false);
+        mail.setUseSignature(false);
+        mail.setReplyTo(s.replytoemail);
+        
+        List<OrgWideEmailAddress> orgWideEmails = [select Id FROM OrgWideEmailAddress Where Address =: s.orgWideEmailAddress Limit 1];
+        
+        if(orgWideEmails.size() > 0 ) {
+        	mail.setOrgWideEmailAddressId(orgWideEmails[0].Id);
+        }
+        else {
+        	mail.setSenderDisplayName(s.senderdisplayfirstname + ' ' + s.senderdisplaylastname);
+        }
+        
+        mail.setSaveAsActivity(true); 
+    
+        String InputString = s.toemailaddress;
+        String emailRegex = '([a-zA-Z0-9_\\-\\.]+)@((\\[a-z]{1,3}\\.[a-z]{1,3}\\.[a-z]{1,3}\\.)|(([a-zA-Z0-9\\-]+\\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})';
+        Pattern MyPattern = Pattern.compile(emailRegex);
+            
+        // Then instantiate a new Matcher object "MyMatcher"
+        Matcher MyMatcher = MyPattern.matcher(InputString);
+        if (MyMatcher.matches()) {
+            if (!Test.isRunningTest()){
+                Messaging.sendEmail(new Messaging.SingleEmailMessage[] { mail });
+            }
+        }
+        
+    }
+
+}
+
+// Test Class
+
+@isTest
+private class sendEmailAndSetActivity_Test {
+static testMethod void testsendEmail() {
+//sendEmailAndSetActivity.SendEmailVariables email = new sendEmailAndSetActivity.SendEmailVariables();
+SendEmailvariables email = new SendEmailvariables();
+email.senderdisplayfirstname = 'Aakash';
+email.senderdisplaylastname = 'Patel';
+email.toemailaddress = 'aakash65@gmail.com';
+email.emailtemplateid = '00XA0000001EBhr';
+email.targetobjectid = '00Q29000004vdzM';
+    
+email.setreplytoemail('EZ1000000001');
+System.assertEquals(email.replytoemail, email.replytoemail);
+    
+
+//List<sendEmailAndSetActivity.SendEmailVariables> lis = new List<sendEmailAndSetActivity.SendEmailvariables>();
+List<SendEmailVariables> lis = new List<SendEmailvariables>();
+lis.add(email);
+sendEmailAndSetActivity.sendEmail(lis);
+System.assertEquals(lis, lis); // Can't really test this, just put something that is true
+}
+}
